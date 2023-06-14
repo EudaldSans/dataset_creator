@@ -79,6 +79,14 @@ def load_wav(path: str) -> np.ndarray:
     return audio_as_np_int16
 
 
+def save_wav(path: str, samplerate: int, audio: np.array) -> None:
+    with wave.open(path, 'w') as wavfile:
+        wavfile.setnchannels(1)
+        wavfile.setsampwidth(2)
+        wavfile.setframerate(samplerate)
+        wavfile.writeframes(audio.tobytes())
+
+
 def process_audio(audio: np.ndarray) -> np.ndarray:
     features = dsp.generate_features(4, False, audio, '0', sample_rate, 0.02, 0.01, 40, 512, 125, 7500, 101, -52)
     flat_mfe = np.array(features['features'])
@@ -103,13 +111,23 @@ def process_label(label_path: str, label_array: List[float]) -> list[list[ndarra
     values = zip(shift_values, stretch_values, noise_values)
     augmented_list = list()
 
-    '''for count, parameters in enumerate(values):
+    for count, parameters in enumerate(values):
         shift_value, stretch_value, noise_value = parameters
         augmented_samples = [augment(sample, shift_value, stretch_value, noise_value, add_reverb=(count % 2 == 1))
                              for sample in tqdm(sample_list, desc=f'Augment pass {count}', file=sys.stdout)]
         augmented_list.extend(augmented_samples)
 
-    sample_list.extend(augmented_list)'''
+    sample_list.extend(augmented_list)
+
+    label = label_path.split('/')[-1]
+    output_path = 'output'
+
+    if not os.path.exists(os.path.join(output_path, label)):
+        os.mkdir(os.path.join(output_path, label))
+
+    for count, audio in enumerate(sample_list):
+        save_wav(os.path.join(output_path, label, f'{label}_{count}.wav'), sample_rate, audio)
+
     spectrogram_list = [[process_audio(sample), label_array]
                         for sample in tqdm(sample_list, desc=f'Processing samples', file=sys.stdout)]
 
@@ -204,7 +222,7 @@ def main_function(dataset_name: str):
 
 
 if __name__ == '__main__':
-    main_function('test_speech_commands')
+    main_function('xpons_dataset')
     x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
