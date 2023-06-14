@@ -52,10 +52,12 @@ def augment(sample: np.ndarray, shift_value: int, stretch_value: float, noise_am
     copied_sample = deepcopy(sample)
     copied_sample = time_shift(copied_sample, shift_value)
     copied_sample = stretch(copied_sample, stretch_value)
-    copied_sample = add_noise(copied_sample, noise_amplitude=noise_amplitude)
+    # copied_sample = add_noise(copied_sample, noise_amplitude=noise_amplitude)
 
     if add_reverb:
-        copied_sample = my_pedalboard(copied_sample, sample_rate=sample_rate)
+        sample_as_float = copied_sample.astype(float)
+        sample_as_float = my_pedalboard(sample_as_float, sample_rate=sample_rate)
+        copied_sample = sample_as_float.astype(np.int16)
 
     return copied_sample
 
@@ -222,7 +224,7 @@ def main_function(dataset_name: str):
 
 
 if __name__ == '__main__':
-    main_function('xpons_dataset')
+    main_function('test_speech_commands')
     x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
