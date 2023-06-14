@@ -1,0 +1,88 @@
+{
+    "version": 1,
+    "info": {
+        "title": "Audio (MFE)",
+        "author": "Edge Impulse",
+        "description": "Extracts a spectrogram from audio signals using Mel-filterbank energy features, great for non-voice audio.",
+        "name": "MFE",
+        "preferConvolution": true,
+        "convolutionColumns": "num_filters",
+        "convolutionKernelSize": 5,
+        "cppType": "mfe",
+        "visualization": "dimensionalityReduction",
+        "experimental": false,
+        "latestImplementationVersion": 4,
+        "hasAutoTune": true
+    },
+    "parameters": [
+        {
+            "group": "Mel-filterbank energy features",
+            "items": [
+                {
+                    "name": "Frame length",
+                    "value": 0.02,
+                    "type": "float",
+                    "help": "The length of each frame in seconds",
+                    "param": "frame_length"
+                },
+                {
+                    "name": "Frame stride",
+                    "value": 0.01,
+                    "type": "float",
+                    "help": "The step between successive frames in seconds",
+                    "param": "frame_stride"
+                },
+                {
+                    "name": "Filter number",
+                    "value": 40,
+                    "type": "int",
+                    "help": "The number of filters in the filterbank",
+                    "param": "num_filters"
+                },
+                {
+                    "name": "FFT length",
+                    "value": 256,
+                    "type": "int",
+                    "help": "Number of FFT points",
+                    "param": "fft_length"
+                },
+                {
+                    "name": "Low frequency",
+                    "value": 0,
+                    "type": "int",
+                    "help": "Lowest band edge of mel filters (in Hz)",
+                    "param": "low_frequency"
+                },
+                {
+                    "name": "High frequency",
+                    "value": 0,
+                    "type": "int",
+                    "help": "Highest band edge of mel filters (in Hz). If set to 0 this is samplerate / 2",
+                    "param": "high_frequency",
+                    "optional": true
+                }
+            ]
+        },
+        {
+            "group": "Normalization",
+            "items": [
+                {
+                    "name": "Window size",
+                    "value": 101,
+                    "type": "int",
+                    "help": "The size of sliding window for local normalization",
+                    "param": "win_size",
+                    "showForImplementationVersion": [ 1, 2 ]
+                },
+                {
+                    "name": "Noise floor (dB)",
+                    "value": -52,
+                    "type": "int",
+                    "help": "Everything less loud than the noise floor will be dropped",
+                    "param": "noise_floor_db",
+                    "showForImplementationVersion": [ 3, 4 ]
+                }
+            ]
+        }
+    ]
+}
