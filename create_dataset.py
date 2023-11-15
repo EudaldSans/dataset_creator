@@ -6,6 +6,8 @@ from copy import deepcopy
 from typing import List, Tuple, Any
 
 import librosa.effects
+from scipy import signal
+from pydub import AudioSegment as am
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -63,22 +65,13 @@ def augment(sample: np.ndarray, shift_value: int, stretch_value: float, noise_am
 
 
 def load_wav(path: str) -> np.ndarray:
-    wavefile = wave.open(path, 'r')
-    samples = wavefile.getnframes()
-    channels = wavefile.getnchannels()
+    sound = am.from_file(path, format='wav', frame_rate=sample_rate)
+    sound = sound.set_channels(1)
+    sound = sound.set_frame_rate(16000)
 
-    audio = wavefile.readframes(samples)
-    if channels == 2:
-        print('Audio has 2 channels')
-        audio = (audio[0] + audio[1])/2
+    audio = sound.get_array_of_samples()
+    return np.array(audio)
 
-    audio_as_np_int16 = np.frombuffer(audio, dtype=np.int16)
-    if len(audio_as_np_int16) > sample_rate:
-        audio_as_np_int16 = audio_as_np_int16[:sample_rate]
-    elif len(audio_as_np_int16) < sample_rate:
-        audio_as_np_int16 = np.pad(audio_as_np_int16, (0, sample_rate - len(audio_as_np_int16)))
-
-    return audio_as_np_int16
 
 
 def save_wav(path: str, samplerate: int, audio: np.array) -> None:
@@ -90,7 +83,7 @@ def save_wav(path: str, samplerate: int, audio: np.array) -> None:
 
 
 def process_audio(audio: np.ndarray) -> np.ndarray:
-    features = dsp.generate_features(4, False, audio, '0', sample_rate, 0.02, 0.01, 40, 512, 125, 7500, 101, -52)
+    features = dsp.generate_features(4, False, audio, '0', sample_rate, 0.02, 0.01, 40, 256, 125, 7500, 101, -52)
     flat_mfe = np.array(features['features'])
 
     return flat_mfe
@@ -102,7 +95,7 @@ def process_label(label_path: str, label_array: List[float]) -> list[list[ndarra
 
     sample_list = [load_wav(path) for path in file_list]
 
-    shift_values = np.arange(-1600, 1600, 1600 * 2 // 5)
+    shift_values = np.arange(-1600, 1600, (1600 * 2) // 5)
     stretch_values = np.arange(0.9, 1.1, (1.1 - 0.9) / 5)
     noise_values = np.arange(0, 0.005, 0.005 / 5)
 
@@ -124,6 +117,8 @@ def process_label(label_path: str, label_array: List[float]) -> list[list[ndarra
     label = label_path.split('/')[-1]
     output_path = 'output'
 
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
     if not os.path.exists(os.path.join(output_path, label)):
         os.mkdir(os.path.join(output_path, label))
 
@@ -144,6 +139,9 @@ def process_raw_dataset(dataset_name: str) -> tuple[list[list[Any]], list[list[A
 
     for pos, label in enumerate(labels):
         print(f'Processing {label}')
+        if label == 'unknown': continue
+        if label == '_background_noise_': continue
+        if label == 'collected_unknown_samples_for_VAD': continue
         label_array = [0.] * len(labels)
         label_array[pos] = 1.
 
@@ -224,8 +222,8 @@ def main_function(dataset_name: str):
 
 
 if __name__ == '__main__':
-    main_function('test_speech_commands')
-    x_train = np.load('data/X_split_train.npy')
+    main_function('simon_UPC_i2cat')
+    '''x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
     y_test = np.load('data/Y_split_test.npy')
@@ -234,20 +232,27 @@ if __name__ == '__main__':
     print(f'x_test shape: {x_test.shape}, dtype: {x_test.dtype}')
     print(f'y_test shape: {y_test.shape}, dtype: {y_test.dtype}')
 
-    '''edge_impulse_test = np.load('edge_impulse_test.npy')
-    edge_impulse_train = np.load('edge_impulse_train.npy')
-    print(f'edge_impulse_test shape: {edge_impulse_test.shape}, dtype: {edge_impulse_test.dtype}')
+    esp32_test = np.load('esp32_test.npy')
+    esp32_train = np.load('esp32_train.npy')
+    print(f'esp32 shape: {esp32_test.shape}, dtype: {esp32_test.dtype}')
 
-    image_1 = x_train[0]
+    ei_train = np.load('ei_train.npy')
+    print(f'edge_impulse_train: {ei_train.shape}, dtype: {ei_train.dtype}')
+
+    image_1 = x_test[1]
     restored_image_1 = image_1.reshape(99, 40).T
-    ei_image_1 = edge_impulse_test[0]
+    esp32_image_1 = esp32_train[3]
+    esp32_restored_image_1 = esp32_image_1.reshape(99, 40).T
+    ei_image_1 = ei_train[1]
     ei_restored_image_1 = ei_image_1.reshape(99, 40).T
 
-    fig, axs = plt.subplots(2, 1)
+    fig, axs = plt.subplots(3, 1)
     axs[0].imshow(restored_image_1)
-    axs[0].set_title('custom')
-    axs[1].imshow(ei_restored_image_1)
-    axs[1].set_title('edge impulse')
+    axs[0].set_title('ours')
+    axs[1].imshow(esp32_restored_image_1)
+    axs[1].set_title('esp32')
+    axs[2].imshow(ei_restored_image_1)
+    axs[2].set_title('edge impulse')
     plt.tight_layout()
     plt.show()'''
 
