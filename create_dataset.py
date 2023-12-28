@@ -5,6 +5,7 @@ import random
 from copy import deepcopy
 from typing import List, Tuple, Any
 import json
+import csv
 
 from scipy import signal
 from scipy.fft import fft, ifft
@@ -82,8 +83,9 @@ def load_wav(path: str) -> np.ndarray:
         with open(path, 'r') as json_file:
             json_text = json_file.read().strip('\n')
         json_sample = json.loads(json_text)
-        print(len(json_sample['payload']['values']))
-        return np.array(json_sample['payload']['values'])
+
+        audio = np.array(json_sample['payload']['values'])
+        return audio.astype(np.int16)
 
     raise ValueError('Wrong file format')
 
@@ -137,11 +139,12 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
     file_list = [os.path.join(label_path, file_name)
                  for file_name in tqdm(os.listdir(label_path), desc=f'Loading files', file=sys.stdout)]
 
-    sample_list = [load_wav(path) for path in file_list]
+    sample_list = [[load_wav(path), path] for path in file_list]
+
     if apply_filter:
         filter_df = pd.read_excel(os.path.join('resources', 'filter_coefficients.xlsx'))
-        sample_list = [filter_audio(sample, sample_rate, filter_df)
-                       for sample in tqdm(sample_list, desc=f'Applying audio filter', file=sys.stdout)]
+        sample_list = [[filter_audio(sample, sample_rate, filter_df), path]
+                       for sample, path in tqdm(sample_list, desc=f'Applying audio filter', file=sys.stdout)]
 
     shift_values = np.arange(-1600, 1600, (1600 * 2) // 5)
     stretch_values = np.arange(0.9, 1.1, (1.1 - 0.9) / 5)
@@ -157,8 +160,8 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
 
     for count, parameters in enumerate(values):
         shift_value, stretch_value, noise_value = parameters
-        augmented_samples = [augment(sample, shift_value, stretch_value, noise_value, add_reverb=(count % 2 == 1))
-                             for sample in tqdm(sample_list, desc=f'Augment pass {count}', file=sys.stdout)]
+        augmented_samples = [[augment(sample, shift_value, stretch_value, noise_value, add_reverb=(count%2 == 1)), path]
+                             for sample, path in tqdm(sample_list, desc=f'Augment pass {count}', file=sys.stdout)]
         augmented_list.extend(augmented_samples)
 
     sample_list.extend(augmented_list)
@@ -171,11 +174,24 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
     if not os.path.exists(os.path.join(output_path, label)):
         os.mkdir(os.path.join(output_path, label))
 
-    for count, audio in enumerate(sample_list):
-        save_wav(os.path.join(output_path, label, f'{label}_{count}.wav'), sample_rate, audio)
+    with open(os.path.join(output_path, f'{label}.csv'), 'w') as file:
+        writer = csv.writer(file)
+        writer.writerow(['new file', 'original file'])
+
+    for count, sample_data in enumerate(sample_list):
+        audio, path = sample_data
+        new_name = f'{label}_{count}.wav'
+        print(audio)
+        print(len(audio))
+        print(sample_rate)
+        save_wav(os.path.join(output_path, label, new_name), sample_rate, audio)
+
+        with open(os.path.join(output_path, f'{label}.csv'), 'a') as file:
+            writer = csv.writer(file)
+            writer.writerow([new_name, path.split('\\')[-1]])
 
     spectrogram_list = [[process_audio(sample), label_array]
-                        for sample in tqdm(sample_list, desc=f'Processing samples', file=sys.stdout)]
+                        for sample, _ in tqdm(sample_list, desc=f'Processing samples', file=sys.stdout)]
 
     return spectrogram_list
 
