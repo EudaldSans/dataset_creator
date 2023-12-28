@@ -106,6 +106,8 @@ def process_audio(audio: np.ndarray) -> np.ndarray:
 
 
 def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) -> np.ndarray:
+    original_length = audio.shape[0]
+    audio = np.pad(audio, pad_width=(0, 16000 - original_length))
     fft_data = fft(audio)
     data_freq = np.fft.fftfreq(len(audio), 1 / samplerate)
 
@@ -132,7 +134,7 @@ def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) ->
     filtered_data_fft = fft_data * symmetric_fft_values_narrow
 
     # Compute IFT to get the audio in time domain
-    return ifft(filtered_data_fft)
+    return ifft(filtered_data_fft)[0:original_length].astype(np.int16)
 
 
 def process_label(label_path: str, label_array: List[float], apply_filter: bool, augment_data: bool) -> list[list[ndarray | list[float]]]:
@@ -181,9 +183,6 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
     for count, sample_data in enumerate(sample_list):
         audio, path = sample_data
         new_name = f'{label}_{count}.wav'
-        print(audio)
-        print(len(audio))
-        print(sample_rate)
         save_wav(os.path.join(output_path, label, new_name), sample_rate, audio)
 
         with open(os.path.join(output_path, f'{label}.csv'), 'a') as file:
@@ -287,7 +286,7 @@ def main_function(dataset_name: str, apply_filter: bool, augment_data: bool):
 
 
 if __name__ == '__main__':
-    main_function('test_json', apply_filter=False, augment_data=True)
+    main_function('test_json', apply_filter=True, augment_data=True)
     '''x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
