@@ -4,12 +4,17 @@ import os
 import random
 from copy import deepcopy
 from typing import List, Tuple, Any
+import json
+
+from scipy import signal
+from scipy.fft import fft, ifft
+from scipy.signal import butter, filtfilt
+from scipy.interpolate import interp1d
 
 import librosa.effects
-from scipy import signal
 from pydub import AudioSegment as am
+import pandas as pd
 
-import matplotlib.pyplot as plt
 import numpy as np
 from numpy import ndarray
 
@@ -65,13 +70,22 @@ def augment(sample: np.ndarray, shift_value: int, stretch_value: float, noise_am
 
 
 def load_wav(path: str) -> np.ndarray:
-    sound = am.from_file(path, format='wav', frame_rate=sample_rate)
-    sound = sound.set_channels(1)
-    sound = sound.set_frame_rate(16000)
+    if path.endswith(".wav"):
+        sound = am.from_file(path, format='wav', frame_rate=sample_rate)
+        sound = sound.set_channels(1)
+        sound = sound.set_frame_rate(16000)
 
-    audio = sound.get_array_of_samples()
-    return np.array(audio)
+        audio = sound.get_array_of_samples()
+        return np.array(audio)
 
+    if path.endswith(".json"):
+        with open(path, 'r') as json_file:
+            json_text = json_file.read().strip('\n')
+        json_sample = json.loads(json_text)
+        print(len(json_sample['payload']['values']))
+        return np.array(json_sample['payload']['values'])
+
+    raise ValueError('Wrong file format')
 
 
 def save_wav(path: str, samplerate: int, audio: np.array) -> None:
@@ -89,11 +103,45 @@ def process_audio(audio: np.ndarray) -> np.ndarray:
     return flat_mfe
 
 
-def process_label(label_path: str, label_array: List[float]) -> list[list[ndarray | list[float]]]:
+def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) -> np.ndarray:
+    fft_data = fft(audio)
+    data_freq = np.fft.fftfreq(len(audio), 1 / samplerate)
+
+    # Get Filter coeficients
+    # filter_df = pd.read_excel(filter)
+    filter_freq = filter_df.frequency
+    narrow_switch = filter_df.narrow_switch
+
+    # Convert the FFT values from decibels to linear scale
+    fft_values_narrow = 10 ** (narrow_switch / 20)
+
+    # Interpolate the FFT values to get a smooth frequency response
+    interp_func_narrow = interp1d(filter_freq, fft_values_narrow, kind='cubic', fill_value='extrapolate')
+    smoothed_filter_freq = np.arange(0, int(len(data_freq) / 2)).astype(np.int16)
+    smooth_fft_values_narrow = interp_func_narrow(smoothed_filter_freq)
+
+    # Normalize the FFT values to have a maximum value of 1
+    smooth_fft_values_narrow /= np.max(smooth_fft_values_narrow)
+
+    # Create symmetric Filter FFT
+    symmetric_fft_values_narrow = np.concatenate((np.flip(smooth_fft_values_narrow), smooth_fft_values_narrow))
+
+    # Apply filter to audio in the frequency domain
+    filtered_data_fft = fft_data * symmetric_fft_values_narrow
+
+    # Compute IFT to get the audio in time domain
+    return ifft(filtered_data_fft)
+
+
+def process_label(label_path: str, label_array: List[float], apply_filter: bool, augment_data: bool) -> list[list[ndarray | list[float]]]:
     file_list = [os.path.join(label_path, file_name)
                  for file_name in tqdm(os.listdir(label_path), desc=f'Loading files', file=sys.stdout)]
 
     sample_list = [load_wav(path) for path in file_list]
+    if apply_filter:
+        filter_df = pd.read_excel(os.path.join('resources', 'filter_coefficients.xlsx'))
+        sample_list = [filter_audio(sample, sample_rate, filter_df)
+                       for sample in tqdm(sample_list, desc=f'Applying audio filter', file=sys.stdout)]
 
     shift_values = np.arange(-1600, 1600, (1600 * 2) // 5)
     stretch_values = np.arange(0.9, 1.1, (1.1 - 0.9) / 5)
@@ -103,7 +151,8 @@ def process_label(label_path: str, label_array: List[float]) -> list[list[ndarra
     random.shuffle(stretch_values)
     random.shuffle(noise_values)
 
-    values = zip(shift_values, stretch_values, noise_values)
+    if augment_data: values = zip(shift_values, stretch_values, noise_values)
+    else: values = list()
     augmented_list = list()
 
     for count, parameters in enumerate(values):
@@ -131,7 +180,7 @@ def process_label(label_path: str, label_array: List[float]) -> list[list[ndarra
     return spectrogram_list
 
 
-def process_raw_dataset(dataset_name: str) -> tuple[list[list[Any]], list[list[Any]]]:
+def process_raw_dataset(dataset_name: str, apply_filter: bool, augment_data: bool) -> tuple[list[list[Any]], list[list[Any]]]:
     dataset_folder = os.path.join('data', dataset_name)
     labels = os.listdir(dataset_folder)
     training_list = list()
@@ -147,7 +196,7 @@ def process_raw_dataset(dataset_name: str) -> tuple[list[list[Any]], list[list[A
 
         label_path = os.path.join(dataset_folder, label)
 
-        spectrogram_list = process_label(label_path, label_array)
+        spectrogram_list = process_label(label_path, label_array, apply_filter, augment_data)
 
         test_train_separation = int(len(spectrogram_list)*(80/100))
 
@@ -157,7 +206,7 @@ def process_raw_dataset(dataset_name: str) -> tuple[list[list[Any]], list[list[A
     return training_list, testing_list
 
 
-def process_divided_dataset(dataset_folder: str) -> tuple[list[list[Any]], list[list[Any]]]:
+def process_divided_dataset(dataset_folder: str, apply_filter: bool, augment_data: bool) -> tuple[list[list[Any]], list[list[Any]]]:
     labels_testing = os.listdir(os.path.join(dataset_folder, 'training'))
     labels_training = os.listdir(os.path.join(dataset_folder, 'testing'))
 
@@ -174,7 +223,7 @@ def process_divided_dataset(dataset_folder: str) -> tuple[list[list[Any]], list[
 
         label_path = os.path.join(dataset_folder, 'training', label)
 
-        spectrogram_list = process_label(label_path, label_array)
+        spectrogram_list = process_label(label_path, label_array, apply_filter, augment_data)
         training_list.extend(spectrogram_list)
 
     testing_list = list()
@@ -185,22 +234,22 @@ def process_divided_dataset(dataset_folder: str) -> tuple[list[list[Any]], list[
 
         label_path = os.path.join(dataset_folder, 'testing', label)
 
-        spectrogram_list = process_label(label_path, label_array)
+        spectrogram_list = process_label(label_path, label_array, apply_filter, augment_data)
         testing_list.extend(spectrogram_list)
 
     return training_list, testing_list
 
 
-def main_function(dataset_name: str):
+def main_function(dataset_name: str, apply_filter: bool, augment_data: bool):
     dataset_folder = os.path.join('data', dataset_name)
     folders = os.listdir(dataset_folder)
     if len(folders) == 2 and 'testing' in folders and 'training' in folders:
         print('Found a manually separated dataset')
-        training_list, testing_list = process_divided_dataset(dataset_folder)
+        training_list, testing_list = process_divided_dataset(dataset_folder, apply_filter, augment_data)
 
     else:
         print('Found an non separated dataset, will perform automatic separation into training and testing')
-        training_list, testing_list = process_raw_dataset(dataset_name)
+        training_list, testing_list = process_raw_dataset(dataset_name, apply_filter, augment_data)
 
     x_train_save_path = os.path.join('data', 'X_split_train.npy')
     y_train_save_path = os.path.join('data', 'Y_split_train.npy')
@@ -215,14 +264,14 @@ def main_function(dataset_name: str):
     x_split_test = [sample[0] for sample in testing_list]
     y_split_test = [sample[1] for sample in testing_list]
 
-    np.save(x_train_save_path, np.asarray(x_split_train).astype('float32'))
+    '''np.save(x_train_save_path, np.asarray(x_split_train).astype('float32'))
     np.save(y_train_save_path, np.asarray(y_split_train).astype('float32'))
     np.save(x_test_save_path, np.asarray(x_split_test).astype('float32'))
-    np.save(y_test_save_path, np.asarray(y_split_test).astype('float32'))
+    np.save(y_test_save_path, np.asarray(y_split_test).astype('float32'))'''
 
 
 if __name__ == '__main__':
-    main_function('simon_UPC_i2cat')
+    main_function('test_json', apply_filter=False, augment_data=True)
     '''x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')

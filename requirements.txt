@@ -3,3 +3,6 @@ numpy
 pedalboard
 tqdm
 matplotlib
+pydub
+pandas
+openpyxl
