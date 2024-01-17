@@ -24,13 +24,62 @@ import mfe.dsp as dsp
 
 from tqdm import tqdm
 
+import webrtcvad
+
 sample_rate = 16000
 
 my_pedalboard = Pedalboard()
 my_pedalboard.append(Reverb())
 
+vad = webrtcvad.Vad(3)
+
+
+def find_voice_start(audio: np.ndarray) -> int:
+    consecutive_voices = 0
+
+    for pos in range(0, len(audio), 320):
+        if pos + 320 >= len(audio): return len(audio)
+        segment = audio[pos:pos + 320]
+
+        if not webrtcvad.valid_rate_and_frame_length(sample_rate, len(segment)):
+            raise ValueError('Segment does not fit!')
+
+        if vad.is_speech(segment, sample_rate):
+            consecutive_voices += 1
+        else:
+            consecutive_voices = 0
+
+        if consecutive_voices >= 2:
+            return pos
+
+    return len(audio)
+
+
+def find_voice_end(audio: np.ndarray) -> int:
+    consecutive_voices = 0
+
+    for pos in range(len(audio), 0, -320):
+        if pos - 320 < 0: return -len(audio)
+        segment = audio[pos - 320:pos]
+
+        if not webrtcvad.valid_rate_and_frame_length(sample_rate, len(segment)):
+            raise ValueError('Segment does not fit!')
+
+        if vad.is_speech(segment, sample_rate):
+            consecutive_voices += 1
+        else:
+            consecutive_voices = 0
+
+        if consecutive_voices >= 2:
+            return pos - len(audio)
+
+    return -len(audio)
+
 
 def time_shift(sample: np.ndarray, time: int):
+    # if time > 0: time = min(find_voice_end(sample), time)
+    if time < 0: time = max(find_voice_start(sample), time)
+
     rolled_sample = np.roll(sample, time)
     return rolled_sample
 
@@ -107,7 +156,7 @@ def process_audio(audio: np.ndarray) -> np.ndarray:
 
 def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) -> np.ndarray:
     original_length = audio.shape[0]
-    audio = np.pad(audio, pad_width=(0, 16000 - original_length))
+    if len(audio) < 16000: audio = np.pad(audio, pad_width=(0, 16000 - original_length))
     fft_data = fft(audio)
     data_freq = np.fft.fftfreq(len(audio), 1 / samplerate)
 
@@ -134,7 +183,13 @@ def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) ->
     filtered_data_fft = fft_data * symmetric_fft_values_narrow
 
     # Compute IFT to get the audio in time domain
-    return ifft(filtered_data_fft)[0:original_length].astype(np.int16)
+    filtered_audio = ifft(filtered_data_fft)[0:original_length].astype(np.int16) * 2
+
+    # If filter is causing audio saturation reduce volume and try again.
+    if max(filtered_audio) > 20000:
+        return filter_audio(audio/2, samplerate, filter_df)
+
+    return audio
 
 
 def process_label(label_path: str, label_array: List[float], apply_filter: bool, augment_data: bool) -> list[list[ndarray | list[float]]]:
@@ -286,7 +341,7 @@ def main_function(dataset_name: str, apply_filter: bool, augment_data: bool):
 
 
 if __name__ == '__main__':
-    main_function('test_json', apply_filter=True, augment_data=True)
+    main_function('catala_sense_augmentar', apply_filter=False, augment_data=False)
     '''x_train = np.load('data/X_split_train.npy')
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
