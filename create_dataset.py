@@ -12,6 +12,8 @@ from scipy.fft import fft, ifft
 from scipy.signal import butter, filtfilt
 from scipy.interpolate import interp1d
 
+import matplotlib.pyplot as plt
+
 import librosa.effects
 from pydub import AudioSegment as am
 import pandas as pd
@@ -177,7 +179,10 @@ def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) ->
     smooth_fft_values_narrow /= np.max(smooth_fft_values_narrow)
 
     # Create symmetric Filter FFT
-    symmetric_fft_values_narrow = np.concatenate((np.flip(smooth_fft_values_narrow), smooth_fft_values_narrow))
+    symmetric_fft_values_narrow = np.concatenate((smooth_fft_values_narrow, np.flip(smooth_fft_values_narrow)))
+
+    # Create symmetric Filter FFT
+    symmetric_fft_values_narrow = np.concatenate((np.flip(smooth_fft_values_narrow, smooth_fft_values_narrow)))
 
     # Apply filter to audio in the frequency domain
     filtered_data_fft = fft_data * symmetric_fft_values_narrow
@@ -189,7 +194,7 @@ def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) ->
     if max(filtered_audio) > 20000:
         return filter_audio(audio/2, samplerate, filter_df)
 
-    return audio
+    return filtered_audio
 
 
 def process_label(label_path: str, label_array: List[float], apply_filter: bool, augment_data: bool) -> list[list[ndarray | list[float]]]:
@@ -341,46 +346,5 @@ def main_function(dataset_name: str, apply_filter: bool, augment_data: bool):
 
 
 if __name__ == '__main__':
-    main_function('catala_sense_augmentar', apply_filter=False, augment_data=False)
-    '''x_train = np.load('data/X_split_train.npy')
-    y_train = np.load('data/Y_split_train.npy')
-    x_test = np.load('data/X_split_test.npy')
-    y_test = np.load('data/Y_split_test.npy')
-    print(f'x_train shape: {x_train.shape}, dtype: {x_train.dtype}')
-    print(f'y_train shape: {y_train.shape}, dtype: {y_train.dtype}')
-    print(f'x_test shape: {x_test.shape}, dtype: {x_test.dtype}')
-    print(f'y_test shape: {y_test.shape}, dtype: {y_test.dtype}')
+    main_function('catala_sense_augmentar', apply_filter=False, augment_data=True)
 
-    esp32_test = np.load('esp32_test.npy')
-    esp32_train = np.load('esp32_train.npy')
-    print(f'esp32 shape: {esp32_test.shape}, dtype: {esp32_test.dtype}')
-
-    ei_train = np.load('ei_train.npy')
-    print(f'edge_impulse_train: {ei_train.shape}, dtype: {ei_train.dtype}')
-
-    image_1 = x_test[1]
-    restored_image_1 = image_1.reshape(99, 40).T
-    esp32_image_1 = esp32_train[3]
-    esp32_restored_image_1 = esp32_image_1.reshape(99, 40).T
-    ei_image_1 = ei_train[1]
-    ei_restored_image_1 = ei_image_1.reshape(99, 40).T
-
-    fig, axs = plt.subplots(3, 1)
-    axs[0].imshow(restored_image_1)
-    axs[0].set_title('ours')
-    axs[1].imshow(esp32_restored_image_1)
-    axs[1].set_title('esp32')
-    axs[2].imshow(ei_restored_image_1)
-    axs[2].set_title('edge impulse')
-    plt.tight_layout()
-    plt.show()'''
-
-    '''image_2 = x_train[1]
-    restored_image_2 = image_2.reshape(99, 40).T
-    ei_image_2 = edge_impulse_test[0]
-    ei_restored_image_2 = ei_image_2.reshape(99, 40).T
-
-    fig, axs = plt.subplots(2, 1)
-    axs[0].imshow(restored_image_2)
-    axs[1].imshow(ei_restored_image_2)
-    plt.show()'''
