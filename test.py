@@ -22,39 +22,53 @@ def test_ei():
     print(f'x_test shape: {x_test.shape}, dtype: {x_test.dtype}')
     print(f'y_test shape: {y_test.shape}, dtype: {y_test.dtype}')
 
-    esp32_test = np.load('esp32_test.npy')
-    esp32_train = np.load('esp32_train.npy')
-    print(f'esp32 shape: {esp32_test.shape}, dtype: {esp32_test.dtype}')
+    '''esp32_train = np.load('data/test_mfe-export/ei_X_split_test.npy')
+    print(f'esp32 shape: {esp32_train.shape}, dtype: {esp32_train.dtype}')'''
 
-    ei_train = np.load('ei_train.npy')
+    ei_train = np.load('data/test_mfe-export/ei_X_split_train.npy')
+    ei_test = np.load('data/test_mfe-export/ei_X_split_test.npy')
     print(f'edge_impulse_train: {ei_train.shape}, dtype: {ei_train.dtype}')
+    print(len(ei_test))
+    print(len(ei_train))
 
-    image_1 = x_test[1]
+    image_1 = ei_test[1]
     restored_image_1 = image_1.reshape(99, 40).T
-    esp32_image_1 = esp32_train[3]
-    esp32_restored_image_1 = esp32_image_1.reshape(99, 40).T
-    ei_image_1 = ei_train[1]
-    ei_restored_image_1 = ei_image_1.reshape(99, 40).T
+    image_2 = x_test[0]
+    restored_image_2 = image_2.reshape(99, 40).T
+    fig, axs = plt.subplots(2, 1)
 
-    fig, axs = plt.subplots(3, 1)
     axs[0].imshow(restored_image_1)
-    axs[0].set_title('ours')
-    axs[1].imshow(esp32_restored_image_1)
-    axs[1].set_title('esp32')
-    axs[2].imshow(ei_restored_image_1)
-    axs[2].set_title('edge impulse')
+    axs[0].set_title('ei')
+    axs[1].imshow(restored_image_2)
+    axs[1].set_title('ours')
     plt.tight_layout()
     plt.show()
 
-    '''image_2 = x_train[1]
+    image_1 = ei_train[0]
+    restored_image_1 = image_1.reshape(99, 40).T
+    image_2 = x_train[0]
     restored_image_2 = image_2.reshape(99, 40).T
-    ei_image_2 = edge_impulse_test[0]
-    ei_restored_image_2 = ei_image_2.reshape(99, 40).T
-
     fig, axs = plt.subplots(2, 1)
-    axs[0].imshow(restored_image_2)
-    axs[1].imshow(ei_restored_image_2)
-    plt.show()'''
+
+    axs[0].imshow(restored_image_1)
+    axs[0].set_title('ei')
+    axs[1].imshow(restored_image_2)
+    axs[1].set_title('ours')
+    plt.tight_layout()
+    plt.show()
+
+    image_1 = ei_test[0]
+    restored_image_1 = image_1.reshape(99, 40).T
+    image_2 = x_train[1]
+    restored_image_2 = image_2.reshape(99, 40).T
+    fig, axs = plt.subplots(2, 1)
+
+    axs[0].imshow(restored_image_1)
+    axs[0].set_title('ei')
+    axs[1].imshow(restored_image_2)
+    axs[1].set_title('ours')
+    plt.tight_layout()
+    plt.show()
 
 
 def test_filter():
@@ -143,4 +157,4 @@ def convert_filter_to_audacity():
 
 
 if __name__ == '__main__':
-    test_filter()
+    test_ei()
