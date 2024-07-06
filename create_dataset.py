@@ -31,7 +31,6 @@ import webrtcvad
 sample_rate = 16000
 
 my_pedalboard = Pedalboard()
-my_pedalboard.append(Reverb())
 
 vad = webrtcvad.Vad(3)
 
@@ -78,7 +77,7 @@ def find_voice_end(audio: np.ndarray) -> int:
     return -len(audio)
 
 
-def time_shift(sample: np.ndarray, time: int):
+def time_shift_sample(sample: np.ndarray, time: int):
     # if time > 0: time = min(find_voice_end(sample), time)
     if time < 0: time = max(find_voice_start(sample), time)
 
@@ -86,7 +85,7 @@ def time_shift(sample: np.ndarray, time: int):
     return rolled_sample
 
 
-def stretch(sample: np.ndarray, rate: float):
+def stretch_sample(sample: np.ndarray, rate: float):
     input_length = sample_rate
     sample_as_float = sample.astype(float)
     stretched_sample = librosa.effects.time_stretch(sample_as_float, rate=rate)
@@ -100,23 +99,27 @@ def stretch(sample: np.ndarray, rate: float):
     return data_as_int16
 
 
-def add_noise(sample: np.ndarray, noise_amplitude: float = 0.005):
+def add_noise_to_sample(sample: np.ndarray, noise_amplitude: float = 0.005):
     wn = np.random.randn(len(sample))
     sample_wn = sample + noise_amplitude * wn
 
     return sample_wn
 
 
+def add_reverb_to_sample(sample: np.ndarray):
+    sample_as_float = sample.astype(float)
+    sample_as_float = my_pedalboard(sample_as_float, sample_rate=sample_rate)
+    return sample_as_float.astype(np.int16)
+
+
 def augment(sample: np.ndarray, shift_value: int, stretch_value: float, noise_amplitude: float, add_reverb=False):
     copied_sample = deepcopy(sample)
-    copied_sample = time_shift(copied_sample, shift_value)
-    copied_sample = stretch(copied_sample, stretch_value)
-    # copied_sample = add_noise(copied_sample, noise_amplitude=noise_amplitude)
+    # copied_sample = time_shift_sample(copied_sample, shift_value)
+    copied_sample = stretch_sample(copied_sample, stretch_value)
+    # copied_sample = add_noise_to_sample(copied_sample, noise_amplitude=noise_amplitude)
 
     if add_reverb:
-        sample_as_float = copied_sample.astype(float)
-        sample_as_float = my_pedalboard(sample_as_float, sample_rate=sample_rate)
-        copied_sample = sample_as_float.astype(np.int16)
+        copied_sample = add_reverb_to_sample(copied_sample)
 
     return copied_sample
 
@@ -138,7 +141,7 @@ def load_wav(path: str) -> np.ndarray:
         audio = np.array(json_sample['payload']['values'])
         return audio.astype(np.int16)
 
-    raise ValueError('Wrong file format')
+    raise ValueError(f'Wrong file format {path}')
 
 
 def save_wav(path: str, samplerate: int, audio: np.array) -> None:
@@ -156,9 +159,14 @@ def process_audio(audio: np.ndarray) -> np.ndarray:
     return flat_mfe
 
 
-def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) -> np.ndarray:
+def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame, path) -> np.ndarray:
     original_length = audio.shape[0]
-    if len(audio) < 16000: audio = np.pad(audio, pad_width=(0, 16000 - original_length))
+    if len(audio) < 16000:
+        audio = np.pad(audio, pad_width=(0, 16000 - original_length))
+
+    if len(audio > 16014):
+        audio = audio[:16014]
+
     fft_data = fft(audio)
     data_freq = np.fft.fftfreq(len(audio), 1 / samplerate)
 
@@ -182,17 +190,21 @@ def filter_audio(audio: np.ndarray, samplerate: int, filter_df: pd.DataFrame) ->
     symmetric_fft_values_narrow = np.concatenate((smooth_fft_values_narrow, np.flip(smooth_fft_values_narrow)))
 
     # Create symmetric Filter FFT
-    symmetric_fft_values_narrow = np.concatenate((np.flip(smooth_fft_values_narrow, smooth_fft_values_narrow)))
 
     # Apply filter to audio in the frequency domain
-    filtered_data_fft = fft_data * symmetric_fft_values_narrow
-
+    try:
+        filtered_data_fft = fft_data * symmetric_fft_values_narrow
+    except ValueError as e:
+        print(f'failed at {path}')
+        print(f'{len(audio)} {len(fft_data)=}, {len(symmetric_fft_values_narrow)=}')
+        print(e)
+        return None
     # Compute IFT to get the audio in time domain
     filtered_audio = ifft(filtered_data_fft)[0:original_length].astype(np.int16) * 2
 
     # If filter is causing audio saturation reduce volume and try again.
     if max(filtered_audio) > 20000:
-        return filter_audio(audio/2, samplerate, filter_df)
+        return filter_audio(audio/2, samplerate, filter_df, path)
 
     return filtered_audio
 
@@ -205,25 +217,44 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
 
     if apply_filter:
         filter_df = pd.read_excel(os.path.join('resources', 'filter_coefficients.xlsx'))
-        sample_list = [[filter_audio(sample, sample_rate, filter_df), path]
-                       for sample, path in tqdm(sample_list, desc=f'Applying audio filter', file=sys.stdout)]
+        filtered_list = list()
 
-    shift_values = np.arange(-1600, 1600, (1600 * 2) // 5)
-    stretch_values = np.arange(0.9, 1.1, (1.1 - 0.9) / 5)
-    noise_values = np.arange(0, 0.005, 0.005 / 5)
+        for sample, path in tqdm(sample_list, desc=f'Applying audio filter', file=sys.stdout):
+            result = filter_audio(sample, sample_rate, filter_df, path)
+            if result is not None: filtered_list.append([result, path])
+
+        sample_list = filtered_list
+
+    shift_values = np.arange(-1600, 1600, (1600 * 2) / 3)
+    stretch_values = np.arange(0.9, 1.1, (1.1 - 0.9) / 3)
+    noise_values = np.arange(0, 0.005, 0.005 / 3)
+    reverb_values = np.arange(0.3, 0.7, (0.7 - 0.3) / 3)
+
 
     random.shuffle(shift_values)
     random.shuffle(stretch_values)
     random.shuffle(noise_values)
+    random.shuffle(reverb_values)
 
-    if augment_data: values = zip(shift_values, stretch_values, noise_values)
+    # if not augment_data:
+    #     print("adding reverb to dataset")
+    #     half_sample_list = sample_list[::2]
+    #     other_half_sample_list = sample_list[1::2]
+    # 
+    #     half_sample_list = [[add_reverb_to_sample(sample), path] for sample, path in half_sample_list]
+    # 
+    #     sample_list =  half_sample_list + other_half_sample_list
+
+    if augment_data: values = zip(shift_values, stretch_values, noise_values, reverb_values)
     else: values = list()
     augmented_list = list()
 
-    for count, parameters in enumerate(values):
-        shift_value, stretch_value, noise_value = parameters
-        augmented_samples = [[augment(sample, shift_value, stretch_value, noise_value, add_reverb=(count%2 == 1)), path]
-                             for sample, path in tqdm(sample_list, desc=f'Augment pass {count}', file=sys.stdout)]
+    for cnt, parameters in enumerate(values):
+        shift_value, stretch_value, noise_value, reverb_value = parameters
+        my_pedalboard.append(Reverb(room_size=reverb_value))
+        augmented_samples = [[augment(sample, shift_value, stretch_value, noise_value, add_reverb=True), path]
+                             for sample, path in tqdm(sample_list, desc=f'Augment pass {cnt}', file=sys.stdout)]
+        my_pedalboard.reset()
         augmented_list.extend(augmented_samples)
 
     sample_list.extend(augmented_list)
@@ -240,17 +271,18 @@ def process_label(label_path: str, label_array: List[float], apply_filter: bool,
         writer = csv.writer(file)
         writer.writerow(['new file', 'original file'])
 
-    for count, sample_data in enumerate(sample_list):
+    for cnt, sample_data in enumerate(sample_list):
         audio, path = sample_data
-        new_name = f'{label}_{count}.wav'
+        new_name = f'{label}_{cnt}.wav'
         save_wav(os.path.join(output_path, label, new_name), sample_rate, audio)
 
         with open(os.path.join(output_path, f'{label}.csv'), 'a') as file:
             writer = csv.writer(file)
             writer.writerow([new_name, path.split('\\')[-1]])
 
-    spectrogram_list = [[process_audio(sample), label_array]
-                        for sample, _ in tqdm(sample_list, desc=f'Processing samples', file=sys.stdout)]
+    spectrogram_list = list()
+    '''spectrogram_list = [[process_audio(sample), label_array]
+                        for sample, _ in tqdm(sample_list, desc=f'Processing samples', file=sys.stdout)]'''
 
     return spectrogram_list
 
@@ -339,12 +371,13 @@ def main_function(dataset_name: str, apply_filter: bool, augment_data: bool):
     x_split_test = [sample[0] for sample in testing_list]
     y_split_test = [sample[1] for sample in testing_list]
 
-    '''np.save(x_train_save_path, np.asarray(x_split_train).astype('float32'))
+    np.save(x_train_save_path, np.asarray(x_split_train).astype('float32'))
     np.save(y_train_save_path, np.asarray(y_split_train).astype('float32'))
     np.save(x_test_save_path, np.asarray(x_split_test).astype('float32'))
-    np.save(y_test_save_path, np.asarray(y_split_test).astype('float32'))'''
+    np.save(y_test_save_path, np.asarray(y_split_test).astype('float32'))
 
 
 if __name__ == '__main__':
-    main_function('catala_sense_augmentar', apply_filter=False, augment_data=True)
+    main_function('google_speech', apply_filter=True, augment_data=True)
+
 

@@ -17,58 +17,80 @@ def test_ei():
     y_train = np.load('data/Y_split_train.npy')
     x_test = np.load('data/X_split_test.npy')
     y_test = np.load('data/Y_split_test.npy')
+    ei_marvin_file = np.load('resources/test_mfe/marvin.npy')
+    ei_happy_file = np.load('resources/test_mfe/happy.npy')
+    ei_eight_file = np.load('resources/test_mfe/eight.npy')
+
     print(f'x_train shape: {x_train.shape}, dtype: {x_train.dtype}')
     print(f'y_train shape: {y_train.shape}, dtype: {y_train.dtype}')
     print(f'x_test shape: {x_test.shape}, dtype: {x_test.dtype}')
     print(f'y_test shape: {y_test.shape}, dtype: {y_test.dtype}')
+    print(f'marvin: {ei_marvin_file.shape}, dtype: {ei_marvin_file.dtype}')
+    print(f'happy: {ei_happy_file.shape}, dtype: {ei_happy_file.dtype}')
+    print(f'eight: {ei_eight_file.shape}, dtype: {ei_eight_file.dtype}')
 
-    '''esp32_train = np.load('data/test_mfe-export/ei_X_split_test.npy')
-    print(f'esp32 shape: {esp32_train.shape}, dtype: {esp32_train.dtype}')'''
+    '''flat_marvin = ei_marvin_file[0]
+    marvin = flat_marvin.reshape(99, 40).T
+    plt.imshow(marvin)
+    plt.title('Our Marvin')
+    plt.tight_layout()
+    plt.show()
 
-    ei_train = np.load('data/test_mfe-export/ei_X_split_train.npy')
-    ei_test = np.load('data/test_mfe-export/ei_X_split_test.npy')
-    print(f'edge_impulse_train: {ei_train.shape}, dtype: {ei_train.dtype}')
-    print(len(ei_test))
-    print(len(ei_train))
+    flat_happy = ei_happy_file[0]
+    happy = flat_happy.reshape(99, 40).T
+    plt.imshow(happy)
+    plt.title('Our happy')
+    plt.tight_layout()
+    plt.show()
 
-    image_1 = ei_test[1]
-    restored_image_1 = image_1.reshape(99, 40).T
-    image_2 = x_test[0]
+    flat_eight = ei_eight_file[0]
+    eight = flat_eight.reshape(99, 40).T
+    plt.imshow(eight)
+    plt.title('Our eight')
+    plt.tight_layout()
+    plt.show()'''
+
+    '''image_2 = x_train[0]
     restored_image_2 = image_2.reshape(99, 40).T
     fig, axs = plt.subplots(2, 1)
 
-    axs[0].imshow(restored_image_1)
+    axs[0].imshow(marvin)
     axs[0].set_title('ei')
     axs[1].imshow(restored_image_2)
     axs[1].set_title('ours')
     plt.tight_layout()
     plt.show()
 
-    image_1 = ei_train[0]
-    restored_image_1 = image_1.reshape(99, 40).T
-    image_2 = x_train[0]
-    restored_image_2 = image_2.reshape(99, 40).T
-    fig, axs = plt.subplots(2, 1)
-
-    axs[0].imshow(restored_image_1)
-    axs[0].set_title('ei')
-    axs[1].imshow(restored_image_2)
-    axs[1].set_title('ours')
-    plt.tight_layout()
-    plt.show()
-
-    image_1 = ei_test[0]
-    restored_image_1 = image_1.reshape(99, 40).T
     image_2 = x_train[1]
     restored_image_2 = image_2.reshape(99, 40).T
     fig, axs = plt.subplots(2, 1)
 
-    axs[0].imshow(restored_image_1)
+    axs[0].imshow(marvin)
     axs[0].set_title('ei')
     axs[1].imshow(restored_image_2)
     axs[1].set_title('ours')
     plt.tight_layout()
     plt.show()
+
+    image_2 = x_test[0]
+    restored_image_2 = image_2.reshape(99, 40).T
+    fig, axs = plt.subplots(2, 1)
+
+    axs[0].imshow(marvin)
+    axs[0].set_title('ei')
+    axs[1].imshow(restored_image_2)
+    axs[1].set_title('ours')
+    plt.tight_layout()
+    plt.show()'''
+
+    flat_apaga = x_test[0]
+    apaga = flat_apaga.reshape(99, 40).T
+    plt.imshow(apaga)
+    plt.title('I2CAT Apaga')
+    plt.tight_layout()
+    plt.show()
+
+    np.savetxt("i2cat_apaga.csv", flat_apaga, delimiter=',')
 
 
 def test_filter():
